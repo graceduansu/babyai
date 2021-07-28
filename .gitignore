@@ -1,3 +1,4 @@
+wandb/*
 model/glove50.txt
 trained_models
 

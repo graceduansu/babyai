@@ -10,12 +10,12 @@ import argparse
 import math
 from babyai.cluster_specific import launch_job
 
-BIG_MODEL_PARAMS = '--memory-dim=2048 --recurrence=80 --batch-size=128 --instr-arch=attgru --instr-dim=256'
-SMALL_MODEL_PARAMS = '--batch-size=256'
+BIG_MODEL_PARAMS = ' --memory-dim=2048 --recurrence=80 --batch-size=128 --instr-arch=attgru --instr-dim=256'
+SMALL_MODEL_PARAMS = ' --batch-size=256'
 
 def main(env, seed, training_time, min_demos, max_demos=None,
          step_size=math.sqrt(2), pretrained_model=None, level_type='small',
-         val_episodes=512):
+         val_episodes=512, baseline=None):
     demos = env
 
     if not max_demos:
@@ -49,6 +49,6 @@ def main(env, seed, training_time, min_demos, max_demos=None,
           .format(**locals()))
         if pretrained_model:
             cmd += ' --pretrained-model {}'.format(pretrained_model)
-        launch_job(cmd, jobname)
+        launch_job(cmd, jobname, baseline=baseline)
 
         seed += 1

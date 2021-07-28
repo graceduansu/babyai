@@ -17,7 +17,7 @@ RUN pip3 install --upgrade pip
 # Clone and install BabyAI git repo
 RUN git clone https://github.com/mila-udem/babyai.git
 WORKDIR babyai
-RUN pip3 install --editable .
+# RUN pip3 install --editable .
 
 # Copy models into the docker image
 COPY models models/

@@ -8,8 +8,12 @@ def get_model_dir(model_name):
     return os.path.join(utils.storage_dir(), "models", model_name)
 
 
-def get_model_path(model_name):
-    return os.path.join(get_model_dir(model_name), "model.pt")
+def get_model_path(model_name, epoch=None):
+    if epoch:
+        filename = "model_epoch" + str(epoch) +"_chkpt.pt"
+        return os.path.join(get_model_dir(model_name), filename)
+    else:
+        return os.path.join(get_model_dir(model_name), "model.pt")
 
 
 def load_model(model_name, raise_not_found=True):
@@ -26,7 +30,16 @@ def load_model(model_name, raise_not_found=True):
             raise FileNotFoundError("No model found at {}".format(path))
 
 
-def save_model(model, model_name):
-    path = get_model_path(model_name)
-    utils.create_folders_if_necessary(path)
-    torch.save(model, path)
+def save_model(model, model_name, optimizer_dict=None, epoch=None):
+    if optimizer_dict is None:
+        path = get_model_path(model_name, epoch=epoch)
+        utils.create_folders_if_necessary(path)
+        torch.save(model, path)
+    else:
+        path = get_model_path(model_name, epoch=epoch)
+        utils.create_folders_if_necessary(path)
+        torch.save({
+            'epoch': epoch,
+            'model': model,
+            'optimizer_state_dict': optimizer_dict
+            }, path)

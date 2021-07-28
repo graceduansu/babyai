@@ -6,6 +6,7 @@ from torch.distributions.categorical import Categorical
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import babyai.rl
 from babyai.rl.utils.supervised_losses import required_heads
+from .iterative_normalization import IterNormRotation as CWLayer
 
 
 # From https://github.com/ikostrikov/pytorch-a2c-ppo-acktr/blob/master/model.py
@@ -63,7 +64,7 @@ class ACModel(nn.Module, babyai.rl.RecurrentACModel):
     def __init__(self, obs_space, action_space,
                  image_dim=128, memory_dim=128, instr_dim=128,
                  use_instr=False, lang_model="gru", use_memory=False,
-                 arch="bow_endpool_res", aux_info=None):
+                 arch="bow_endpool_res", aux_info=None, concept_whitening=False):
         super().__init__()
 
         endpool = 'endpool' in arch
@@ -91,22 +92,44 @@ class ACModel(nn.Module, babyai.rl.RecurrentACModel):
 
         # if not self.use_instr:
         #     raise ValueError("FiLM architecture can be used when instructions are enabled")
-        self.image_conv = nn.Sequential(*[
-            *([ImageBOWEmbedding(obs_space['image'], 128)] if use_bow else []),
-            *([nn.Conv2d(
-                in_channels=3, out_channels=128, kernel_size=(8, 8),
-                stride=8, padding=0)] if pixel else []),
-            nn.Conv2d(
-                in_channels=128 if use_bow or pixel else 3, out_channels=128,
-                kernel_size=(3, 3) if endpool else (2, 2), stride=1, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            *([] if endpool else [nn.MaxPool2d(kernel_size=(2, 2), stride=2)]),
-            nn.Conv2d(in_channels=128, out_channels=128, kernel_size=(3, 3), padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            *([] if endpool else [nn.MaxPool2d(kernel_size=(2, 2), stride=2)])
-        ])
+        if concept_whitening:
+            self.cw_layer = CWLayer(128, activation_mode='mean', T=8)
+
+            self.image_conv = nn.Sequential(*[
+                *([ImageBOWEmbedding(obs_space['image'], 128)] if use_bow else []),
+                *([nn.Conv2d(
+                    in_channels=3, out_channels=128, kernel_size=(8, 8),
+                    stride=8, padding=0)] if pixel else []),
+                nn.Conv2d(
+                    in_channels=128 if use_bow or pixel else 3, out_channels=128,
+                    kernel_size=(3, 3) if endpool else (2, 2), stride=1, padding=1),
+                nn.BatchNorm2d(128),
+                nn.ReLU(),
+                *([] if endpool else [nn.MaxPool2d(kernel_size=(2, 2), stride=2)]),
+                nn.Conv2d(in_channels=128, out_channels=128, kernel_size=(3, 3), padding=1),
+                self.cw_layer,
+                nn.ReLU(),
+                *([] if endpool else [nn.MaxPool2d(kernel_size=(2, 2), stride=2)])
+                ])
+        else:
+            self.image_conv = nn.Sequential(*[
+                *([ImageBOWEmbedding(obs_space['image'], 128)] if use_bow else []),
+                *([nn.Conv2d(
+                    in_channels=3, out_channels=128, kernel_size=(8, 8),
+                    stride=8, padding=0)] if pixel else []),
+                nn.Conv2d(
+                    in_channels=128 if use_bow or pixel else 3, out_channels=128,
+                    kernel_size=(3, 3) if endpool else (2, 2), stride=1, padding=1),
+                nn.BatchNorm2d(128),
+                nn.ReLU(),
+                *([] if endpool else [nn.MaxPool2d(kernel_size=(2, 2), stride=2)]),
+                nn.Conv2d(in_channels=128, out_channels=128, kernel_size=(3, 3), padding=1),
+                nn.BatchNorm2d(128),
+                nn.ReLU(),
+                *([] if endpool else [nn.MaxPool2d(kernel_size=(2, 2), stride=2)])
+                ])
+
+        
         self.film_pool = nn.MaxPool2d(kernel_size=(7, 7) if endpool else (2, 2), stride=2)
 
         # Define instruction embedding
@@ -168,6 +191,20 @@ class ACModel(nn.Module, babyai.rl.RecurrentACModel):
         if self.aux_info:
             self.extra_heads = None
             self.add_heads()
+
+
+    def add_cw(self):
+            self.cw_layer = CWLayer(128, activation_mode='mean')
+            self.image_conv[5] = self.cw_layer
+
+
+    def change_mode(self, mode):
+        self.cw_layer.mode = mode
+
+    
+    def update_rotation_matrix(self):
+        self.cw_layer.update_rotation_matrix()
+
 
     def add_heads(self):
         '''
@@ -255,6 +292,8 @@ class ACModel(nn.Module, babyai.rl.RecurrentACModel):
             hidden = (memory[:, :self.semi_memory_size], memory[:, self.semi_memory_size:])
             hidden = self.memory_rnn(x, hidden)
             embedding = hidden[0]
+            # print('============================= DEBUG rnn embedding requires grad =============================')
+            # print(embedding.requires_grad)
             memory = torch.cat(hidden, dim=1)
         else:
             embedding = x
@@ -276,6 +315,8 @@ class ACModel(nn.Module, babyai.rl.RecurrentACModel):
         lengths = (instr != 0).sum(1).long()
         if self.lang_model == 'gru':
             out, _ = self.instr_rnn(self.word_embedding(instr))
+            # print('============================= DEBUG GRU output requires grad =============================')
+            # print(out.requires_grad)
             hidden = out[range(len(lengths)), lengths-1, :]
             return hidden
 

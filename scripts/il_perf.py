@@ -34,6 +34,7 @@ def get_data(path, regex):
     for model in models:
         df_model = df[df['model'] == model]
         success_rate = df_model['validation_success_rate']
+        print(success_rate)
         success_rate = success_rate.rolling(args.window, center=True).mean()
         success_rate = max(success_rate[np.logical_not(np.isnan(success_rate))])
         print(model, success_rate)

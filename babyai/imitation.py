@@ -18,7 +18,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 import numpy
-
+import tqdm
+import pickle
 
 class EpochIndexSampler:
     """
@@ -140,12 +141,15 @@ class ImitationLearning(object):
         if self.acmodel is None:
             if getattr(self.args, 'pretrained_model', None):
                 self.acmodel = utils.load_model(args.pretrained_model, raise_not_found=True)
+                self.acmodel.eval()
+                self.acmodel.add_cw()
             else:
                 logger.info('Creating new model')
                 self.acmodel = ACModel(self.obss_preprocessor.obs_space, action_space,
                                        args.image_dim, args.memory_dim, args.instr_dim,
                                        not self.args.no_instr, self.args.instr_arch,
-                                       not self.args.no_mem, self.args.arch)
+                                       not self.args.no_mem, self.args.arch, concept_whitening=self.args.concept_whitening)
+        
         self.obss_preprocessor.vocab.save()
         utils.save_model(self.acmodel, args.model)
 
@@ -180,11 +184,19 @@ class ImitationLearning(object):
             default_model_name = args.pretrained_model + '_pretrained_' + default_model_name
         return default_model_name
 
+    # TODO: what is the purpose of starting_indexes?
     def starting_indexes(self, num_frames):
         if num_frames % self.args.recurrence == 0:
             return np.arange(0, num_frames, self.args.recurrence)
         else:
             return np.arange(0, num_frames, self.args.recurrence)[:-1]
+
+
+    def load(path):
+        with open(path, 'rb') as file:
+            data = pickle.load(file)
+        return data
+
 
     def run_epoch_recurrence(self, demos, is_training=False, indices=None):
         if not indices:
@@ -202,7 +214,7 @@ class ImitationLearning(object):
 
         start_time = time.time()
         frames = 0
-        for batch_index in range(len(indices) // batch_size):
+        for batch_index in tqdm.trange(len(indices) // batch_size):
             logger.info("batch {}, FPS so far {}".format(
                 batch_index, frames / (time.time() - start_time) if frames else 0))
             batch = [demos[i] for i in indices[offset: offset + batch_size]]
@@ -221,6 +233,17 @@ class ImitationLearning(object):
             self.acmodel.train()
 
         return log
+
+
+    def CW_run_epoch_recurrence(self, batch_dict):
+        
+        # Log dictionary
+        log = {"entropy": [], "policy_loss": [], "accuracy": []}
+
+        _log = self.CW_run_epoch_recurrence_one_batch(batch_dict)
+
+        return log
+
 
     def run_epoch_recurrence_one_batch(self, batch, is_training=False):
         batch = utils.demos.transform_demos(batch)
@@ -259,6 +282,9 @@ class ImitationLearning(object):
             obs = obss[inds]
             done_step = done[inds]
             preprocessed_obs = self.obss_preprocessor(obs, device=self.device)
+
+            # TODO: does torch have grad once the with statement finishes?
+            # use this for CW? it just generates memories without doing any training right?
             with torch.no_grad():
                 # taking the memory till len(inds), as demos beyond that have already finished
                 new_memory = self.acmodel(
@@ -285,6 +311,10 @@ class ImitationLearning(object):
         memory = memories[indexes]
         accuracy = 0
         total_frames = len(indexes) * self.args.recurrence
+
+        # TODO: do I have to update CW matrix in a recurrence fashion? does concept data memory also need 
+        # to be updated like below? 
+        # Does "indexes" stay the same for CW?
         for _ in range(self.args.recurrence):
             obs = obss[indexes]
             preprocessed_obs = self.obss_preprocessor(obs, device=self.device)
@@ -320,6 +350,96 @@ class ImitationLearning(object):
 
         return log
 
+
+    def CW_run_epoch_recurrence_one_batch(self, batch_dict):
+
+        flat_batch = batch_dict['flat_batch']
+        mask = torch.tensor(batch_dict['mask'], device=self.device)
+        episode_ids = batch_dict['episode_ids']
+        inds = batch_dict['inds']
+        flat_batch_concept_inds = batch_dict['flat_batch_concept_inds']
+        concept_mask = torch.tensor(batch_dict['concept_mask'], device=self.device)
+        concept_episode_ids = batch_dict['concept_episode_ids']
+        concept_inds = batch_dict['concept_inds']
+        
+        num_frames = len(flat_batch)
+
+        obss, action_true, done = flat_batch[:, 0], flat_batch[:, 1], flat_batch[:, 2]
+        
+        len_batch = 1280
+        # Memory to be stored
+        memories = torch.zeros([len(flat_batch), self.acmodel.memory_size], device=self.device)
+        memory = torch.zeros([len_batch, self.acmodel.memory_size], device=self.device)
+
+        preprocessed_first_obs = self.obss_preprocessor(obss[inds], device=self.device)
+        instr_embedding = self.acmodel._get_instr_embedding(preprocessed_first_obs.instr)
+
+        # Loop terminates when every observation in the flat_batch has been handled
+        while True:
+            # taking observations and done located at inds
+            obs = obss[inds]
+            done_step = done[inds]
+            preprocessed_obs = self.obss_preprocessor(obs, device=self.device)
+
+            with torch.no_grad():
+                # taking the memory till len(inds), as demos beyond that have already finished
+                new_memory = self.acmodel(
+                    preprocessed_obs,
+                    memory[:len(inds), :], instr_embedding[:len(inds)])['memory']
+
+            memories[inds, :] = memory[:len(inds), :]
+            memory[:len(inds), :] = new_memory
+
+            # Updating inds, by removing those indices corresponding to which the demonstrations have finished
+            inds = inds[:len(inds) - sum(done_step)]
+            if len(inds) == 0:
+                break
+
+            # Incrementing the remaining indices
+            inds = [index + 1 for index in inds]
+
+        ############ CUT MEMORIES AND OBSS TO CONCEPT TIMESTEPS ONLY ####################
+        flat_concept_batch = []
+    
+        for pair in flat_batch_concept_inds:
+            concept_data = flat_batch[pair[0]:pair[1]]
+            flat_concept_batch.extend(concept_data)
+
+        concept_memories = torch.zeros([len(flat_concept_batch), self.acmodel.memory_size], device=self.device)
+        mem_start = 0
+        for pair in flat_batch_concept_inds:
+            mem = memories[pair[0]:pair[1]]
+            concept_memories[mem_start:mem_start + len(mem)] = mem
+            mem_start += len(mem)
+
+        # Here, actual backprop upto args.recurrence happens
+
+        flat_concept_batch = np.array(flat_concept_batch)
+        # total_frames = len(indexes) * self.args.recurrence
+        obss, action_true, done = flat_concept_batch[:, 0], flat_concept_batch[:, 1], flat_concept_batch[:, 2]
+
+        preprocessed_first_obs = self.obss_preprocessor(obss[concept_inds], device=self.device)
+        instr_embedding = self.acmodel._get_instr_embedding(preprocessed_first_obs.instr)
+        c_indexes = self.starting_indexes(len(flat_concept_batch))
+        concept_memory = concept_memories[c_indexes]
+
+        for _ in tqdm.trange(self.args.recurrence):
+            obs = obss[c_indexes]
+            preprocessed_obs = self.obss_preprocessor(obs, device=self.device)
+            mask_step = concept_mask[c_indexes]
+
+            model_results = self.acmodel(
+                preprocessed_obs, concept_memory * mask_step,
+                instr_embedding[concept_episode_ids[c_indexes]])
+
+            concept_memory = model_results['memory']
+
+            c_indexes += 1
+
+        log = {}
+
+        return log
+
     def validate(self, episodes, verbose=True):
         if verbose:
             logger.info("Validating the model")
@@ -347,7 +467,11 @@ class ImitationLearning(object):
         mean_return = {tid: np.mean(log["return_per_episode"]) for tid, log in enumerate(logs)}
         return mean_return
 
-    def train(self, train_demos, writer, csv_writer, status_path, header, reset_status=False):
+    def train(self, train_demos, writer, csv_writer, status_path, header, reset_status=False, concept_directory='/data/graceduansu/concepts'):
+        concept_dirs = sorted([os.path.join(concept_directory, filename) for filename in os.listdir(concept_directory)])
+        print('Concepts:', [os.path.basename(p) for p in concept_dirs], '\n')
+
+
         # Load the status
         def initial_status():
             return {'i': 0,
@@ -393,6 +517,30 @@ class ImitationLearning(object):
             indices = index_sampler.get_epoch_indices(status['i'])
             log = self.run_epoch_recurrence(train_demos, is_training=True, indices=indices)
             
+            # Concept whitening
+            #  and np.mean(log['policy_loss']) < 8.0
+            if self.args.concept_whitening:
+                if (status['i'] + 1) % 1 == 0:
+                    self.acmodel.eval()
+                    with torch.no_grad():
+                        for concept_index, concept_dir in enumerate(tqdm.tqdm(concept_dirs, leave=False)):
+                            concept_paths = [os.path.join(concept_dir, f) for f in os.listdir(concept_dir)]
+                            concept_path = np.random.choice(concept_paths)
+                            
+                            batch_dict = None
+                            with open(concept_path, 'rb') as file:
+                                batch_dict = pickle.load(file)
+
+                            logger.info('loaded concept path: {}'.format(concept_path))
+
+                            self.acmodel.change_mode(concept_index)
+                            CW_log = self.CW_run_epoch_recurrence(batch_dict)
+                            # TODO: log CW somehow
+
+                        self.acmodel.update_rotation_matrix()
+                        self.acmodel.change_mode(-1)
+                    self.acmodel.train()
+
             # Learning rate scheduler
             self.scheduler.step()
 
@@ -400,6 +548,10 @@ class ImitationLearning(object):
             status['i'] += 1
 
             update_end_time = time.time()
+
+            # Save model as backup
+            utils.save_model(self.acmodel, self.args.model, optimizer_dict=self.optimizer.state_dict(), epoch=status['i'])
+            logger.info('Saving checkpoint for model {}'.format(self.args.model))
 
             # Print logs
             if status['i'] % self.args.log_interval == 0:
@@ -423,9 +575,10 @@ class ImitationLearning(object):
                     # instantiate a validation_log with empty strings when no validation is done
                     validation_data = [''] * len([key for key in header if 'valid' in key])
                     assert len(header) == len(train_data + validation_data)
-                    if self.args.tb:
+                    if self.args.tblog:
                         for key, value in zip(header, train_data):
                             writer.add_scalar(key, float(value), status['num_frames'])
+                            # wandb.log({key: float(value), 'num_frames': status['num_frames']})
                     csv_writer.writerow(train_data + validation_data)
 
             if status['i'] % self.args.val_interval == 0:
@@ -445,7 +598,7 @@ class ImitationLearning(object):
                                  ).format(*validation_data))
 
                     assert len(header) == len(train_data + validation_data)
-                    if self.args.tb:
+                    if self.args.tblog:
                         for key, value in zip(header, train_data + validation_data):
                             writer.add_scalar(key, float(value), status['num_frames'])
                     csv_writer.writerow(train_data + validation_data)
