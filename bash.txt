@@ -31,7 +31,9 @@ d2ae21a5dfe0
 
 ##########3 docker babyai_mod image id ##################3 
 a975358515be
-docker run --gpus device=5 -it -t babyai_mod
+docker run --gpus device=5 -it -t babyai_mod 
+ docker cp demos/BabyAI-GoTo-v0.pkl 72ee09c3799e:/babyai/demos/BabyAI-GoTo-v0_valid.pkl
+docker commit 72ee09c3799e babyai_mod
 
 scripts/evaluate.py --env BabyAI-GoToImpUnlock-v0 --model GoToImpUnlock-1_best
 scripts/evaluate.py --env BabyAI-BossLevel-v0 --model BossLevel-1_best
