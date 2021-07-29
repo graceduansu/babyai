@@ -60,6 +60,7 @@ def load_logs(root, multiphase=False):
     dfs = []
     for root, dirs, files in os.walk(root, followlinks=True):
         for file_ in files:
+            print(file_)
             if file_ == 'log.csv':
                 dfs.append(load_multiphase_log(root) if multiphase else load_log(root))
     return dfs

@@ -92,7 +92,8 @@ class ACModel(nn.Module, babyai.rl.RecurrentACModel):
 
         # if not self.use_instr:
         #     raise ValueError("FiLM architecture can be used when instructions are enabled")
-        if concept_whitening:
+        print('BRUH ', concept_whitening)
+        if concept_whitening == True:
             self.cw_layer = CWLayer(128, activation_mode='mean', T=8)
 
             self.image_conv = nn.Sequential(*[

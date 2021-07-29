@@ -43,6 +43,7 @@ parser.add_argument("--tblog", type=int, default=1,
 
 # Added for Concept Whitening
 parser.add_argument("--concept_whitening", action="store_true", help="add this flag to use concept whitening")
+parser.add_argument("--continue_training", default=None, help="checkpoint file path")
 
 
 def main(args):

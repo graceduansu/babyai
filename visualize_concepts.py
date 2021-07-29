@@ -143,8 +143,8 @@ def get_activations(acmodel, batch_dict, observation_space, action_space, model_
 
 
 ##########################################
-model_name = 'My-Baseline-TransferCW_best'
-device = 'cuda:3'
+model_name = 'BabyAI-CW_best'
+device = 'cuda:0'
 #############################################
 
 model_path = '/data/graceduansu/models/'+ model_name + '/model.pt'
@@ -162,11 +162,14 @@ env = gym.make(env_name)
 observation_space = env.observation_space
 action_space = env.action_space
 
+x = []
+y = []
+
 for concept_index, concept_dir in enumerate(tqdm.tqdm(concept_dirs, leave=False)):
     concept_paths = [os.path.join(concept_dir, f) for f in os.listdir(concept_dir)]
     activations = []
 
-    for _ in tqdm.trange(3):
+    for _ in tqdm.trange(1):
         concept_path = np.random.choice(concept_paths)
         
         batch_dict = None
@@ -175,6 +178,8 @@ for concept_index, concept_dir in enumerate(tqdm.tqdm(concept_dirs, leave=False)
 
         a = get_activations(acmodel, batch_dict, observation_space, action_space, model_name, device=device)
         activations.append(a)
+        x.append(a)
+        y.append(concept_index)
 
 
     z = np.vstack(activations).mean(axis=0)
@@ -184,7 +189,48 @@ for concept_index, concept_dir in enumerate(tqdm.tqdm(concept_dirs, leave=False)
     x_pos = [i for i, _ in enumerate(CONCEPTS)]
     plt.bar(x_pos, z)
     plt.xticks(x_pos, CONCEPTS)
-    plt.title('Model {}: Mean activations for data from concept {}'.format(model_name, concept_index+1))
+    plt.title('Model {}:\n Mean activations for Concept {} Data Input'.format(model_name, concept_index+1))
     plt.savefig('/data/graceduansu/models/{}/mean_activations_concept_{}.png'.format(model_name, concept_index+1))
     plt.show()
+    plt.clf()
 
+x = np.array(x)
+y = np.array(y)
+print(x.shape)
+print(y.shape)
+
+from sklearn.tree import DecisionTreeClassifier # Import Decision Tree Classifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split # Import train_test_split function
+from sklearn import metrics #Import scikit-learn metrics module for accuracy calculation
+from sklearn.preprocessing import StandardScaler
+
+# p = np.random.permutation(len(x))
+# N = int(len(p) / 5)
+# X_train, y_train = x[p[:N]], y[p[:N]]
+# X_test, y_test = x[p[N:]], y[p[N:]]
+X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2)
+
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_test = scaler.transform(X_test)
+
+# Create Decision Tree classifer object
+clf = LogisticRegression()
+
+# Train Decision Tree Classifer
+clf = clf.fit(X_train,y_train)
+
+#Predict the response for test dataset
+y_pred = clf.predict(X_test)
+
+# Model Accuracy, how often is the classifier correct?
+print("LR Accuracy:", metrics.accuracy_score(y_test, y_pred))
+
+dt = DecisionTreeClassifier()
+dt = dt.fit(X_train, y_train)
+#Predict the response for test dataset
+y_pred = dt.predict(X_test)
+
+# Model Accuracy, how often is the classifier correct?
+print("DT Accuracy:", metrics.accuracy_score(y_test, y_pred))

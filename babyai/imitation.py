@@ -143,24 +143,32 @@ class ImitationLearning(object):
                 self.acmodel = utils.load_model(args.pretrained_model, raise_not_found=True)
                 self.acmodel.eval()
                 self.acmodel.add_cw()
+                self.optimizer = torch.optim.Adam(self.acmodel.parameters(), self.args.lr, eps=self.args.optim_eps)
             else:
                 logger.info('Creating new model')
                 self.acmodel = ACModel(self.obss_preprocessor.obs_space, action_space,
                                        args.image_dim, args.memory_dim, args.instr_dim,
                                        not self.args.no_instr, self.args.instr_arch,
                                        not self.args.no_mem, self.args.arch, concept_whitening=self.args.concept_whitening)
+                self.optimizer = torch.optim.Adam(self.acmodel.parameters(), self.args.lr, eps=self.args.optim_eps)
         
         self.obss_preprocessor.vocab.save()
-        utils.save_model(self.acmodel, args.model)
 
-        self.acmodel.train()
-        if torch.cuda.is_available():
-            self.acmodel.cuda()
+        if self.args.continue_training is not None:
+            checkpoint = torch.load(self.args.continue_training)
+            self.acmodel = checkpoint['model']
+            logger.info('Resuming training from epoch {}'.format(checkpoint['epoch']))
+            self.optimizer = torch.optim.Adam(self.acmodel.parameters(), self.args.lr, eps=self.args.optim_eps)
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
-        self.optimizer = torch.optim.Adam(self.acmodel.parameters(), self.args.lr, eps=self.args.optim_eps)
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=100, gamma=0.9)
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        utils.save_model(self.acmodel, args.model)
+        self.acmodel.train()
+        if torch.cuda.is_available():
+            self.acmodel.cuda()
 
     @staticmethod
     def default_model_name(args):
