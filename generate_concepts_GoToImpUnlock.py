@@ -253,20 +253,20 @@ for i in range(0, 128):
 
     # filter for 1280 demos that have unlock action
     count = 0
-    see_door_idx = None
+    search_begin_idx = None
     unlock_idx = None
     pickup_idx = None
     dem_transformed = None
 
     while count < 128:
-        see_door_idx = None
+        search_begin_idx = None
         unlock_idx = None
         pickup_idx = None
         dem_transformed = None
 
-        while unlock_idx is None or pickup_idx is None or see_door_idx is None:
+        while unlock_idx is None or pickup_idx is None or search_begin_idx is None:
 
-            see_door_idx = None
+            search_begin_idx = None
             unlock_idx = None
             pickup_idx = None
             dem_transformed = None
@@ -294,15 +294,15 @@ for i in range(0, 128):
 
                         if pickup_idx is not None:
                             if isdoor and iscolor:
-                                see_door_idx = t
+                                search_begin_idx = t
                                 break
 
         # (start, end) idx
         batch.append(dem_transformed)
         last_idx = len(dem_transformed)
-        concept1_inds.append((see_door_idx, pickup_idx))
+        concept1_inds.append((search_begin_idx, pickup_idx))
         concept2_inds.append((pickup_idx, unlock_idx))
-        concept3_inds.append((0, see_door_idx, unlock_idx, last_idx))
+        concept3_inds.append((0, search_begin_idx, unlock_idx, last_idx))
 
         count += 1
 

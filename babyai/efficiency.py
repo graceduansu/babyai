@@ -37,7 +37,7 @@ def main(env, seed, training_time, min_demos, max_demos=None,
         print('{} demos, {} epochs of {} examples'.format(demo_count, epochs, epoch_length))
 
         # Form the command
-        model_name = '{}_baseline_seed{}_{}'.format(demos, seed, demo_count)
+        model_name = '{}_CW_seed{}_{}'.format(demos, seed, demo_count)
         if pretrained_model:
             model_name += '_{}'.format(pretrained_model)
         jobname = '{}_efficiency'.format(demos, min_demos, max_demos)
@@ -49,6 +49,6 @@ def main(env, seed, training_time, min_demos, max_demos=None,
           .format(**locals()))
         if pretrained_model:
             cmd += ' --pretrained-model {}'.format(pretrained_model)
-        launch_job(cmd, jobname, baseline=True)
+        launch_job(cmd, jobname, baseline=False)
 
         seed += 1

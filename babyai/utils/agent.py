@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import torch
 from .. import utils
-from babyai.bot import Bot
+from babyai.bot import Bot, Subgoal
 from babyai.model import ACModel
 from random import Random
 
@@ -147,8 +147,9 @@ class BotAgent:
         self.bot = Bot(self.env)
 
     def act(self, obs=None, update_internal_state=True, *args, **kwargs):
-        action = self.bot.replan()
-        return {'action': action}
+        action, subgoal = self.bot.replan()
+        return {'action': action,
+                'subgoal': subgoal}
 
     def analyze_feedback(self, reward, done):
         pass

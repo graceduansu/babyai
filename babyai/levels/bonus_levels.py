@@ -319,6 +319,65 @@ class Level_UnlockPickup(RoomGridLevel):
         self.instrs = PickupInstr(ObjDesc(obj.type, obj.color))
 
 
+class Level_UnlockDoor(RoomGridLevel):
+    """
+    Unlock a door ( just learn color relationship between door and key)
+    """
+
+    def __init__(self, distractors=False, seed=None):
+        self.distractors = distractors
+
+        room_size = 6
+        super().__init__(
+            num_rows=1,
+            num_cols=2,
+            room_size=room_size,
+            max_steps=8*room_size**2,
+            seed=seed
+        )
+
+    def gen_mission(self):
+
+        # Make sure the two rooms are directly connected by a locked door
+        door, _ = self.add_door(0, 0, 0, locked=True)
+        # Add a key to unlock the door
+        self.add_object(0, 0, 'key', door.color)
+
+        self.place_agent(0, 0)
+
+        self.instrs = OpenInstr(ObjDesc(door.type, door.color))
+
+
+class Level_UnlockRGB(RoomGridLevel):
+    """
+    Unlock a door ( just learn color relationship between door and key, colors=RGB only)
+    """
+
+    def __init__(self, distractors=False, seed=None):
+        self.distractors = distractors
+
+        room_size = 6
+        super().__init__(
+            num_rows=1,
+            num_cols=2,
+            room_size=room_size,
+            max_steps=8*room_size**2,
+            seed=seed
+        )
+
+    def gen_mission(self):
+
+        # Make sure the two rooms are directly connected by a locked door
+        c = np.random.choice(['red', 'green', 'blue'])
+        door, _ = self.add_door(0, 0, 0, locked=True, color=c)
+        # Add a key to unlock the door
+        self.add_object(0, 0, 'key', door.color)
+
+        self.place_agent(0, 0)
+
+        self.instrs = OpenInstr(ObjDesc(door.type, door.color))
+
+
 class Level_UnlockPickupDist(Level_UnlockPickup):
     """
     Unlock a door, then pick up an object in another room

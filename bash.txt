@@ -1,5 +1,5 @@
 ############## without concept whitening ########################
-CUDA_VISIBLE_DEVICES=3 scripts/LOG_train_il.py --model MY-BASELINE-test --env BabyAI-GoToImpUnlock-v0 --demos /data/graceduansu/demos/BabyAI-GoToImpUnlock-v0 --memory-dim=2048 --recurrence=80 --batch-size=128 --instr-arch=attgru --instr-dim=256 --val-interval 1 --log-interval 1  --epoch-length 51200 --lr 5e-5 --tb
+CUDA_VISIBLE_DEVICES=7 scripts/LOG_train_il.py --model MY-BASELINE-test --env BabyAI-GoToImpUnlock-v0 --demos /data/graceduansu/demos/BabyAI-GoToImpUnlock-v0 --memory-dim=2048 --recurrence=80 --batch-size=128 --instr-arch=attgru --instr-dim=256 --val-interval 1 --log-interval 1  --epoch-length 51200 --lr 5e-5 --tb
 
 ############## with concept whitening ###########################
 CUDA_VISIBLE_DEVICES=6 scripts/LOG_train_il.py --env BabyAI-GoToImpUnlock-v0 --demos /data/graceduansu/demos/BabyAI-GoToImpUnlock-v0 --concept_whitening --memory-dim=2048 --recurrence=80 --batch-size=128 --instr-arch=attgru --instr-dim=256 --val-interval 1 --log-interval 1  --epoch-length 51200 --lr 5e-5 --tb
@@ -9,26 +9,46 @@ CUDA_VISIBLE_DEVICES=5 scripts/LOG_train_il.py --model BabyAI-GoToImpUnlock-Tran
 
 
 ##################### transfer CW ###############################################
-CUDA_VISIBLE_DEVICES=4 scripts/LOG_train_il.py --model My-Baseline-TransferCW --pretrained-model BabyAI-GoToImpUnlock-v0_IL_bow_endpool_res_attgru_seed1_21-07-24-18-35-25_best --env BabyAI-GoToImpUnlock-v0 --demos /data/graceduansu/demos/BabyAI-GoToImpUnlock-v0 --concept_whitening --memory-dim=2048 --recurrence=80 --batch-size=128 --instr-arch=attgru --instr-dim=256 --val-interval 1 --log-interval 1  --epoch-length 51200 --lr 5e-5 --tb
+CUDA_VISIBLE_DEVICES=3 scripts/LOG_train_il.py --model MY-BASELINE-TransferCW_batchfix --pretrained-model MY-BASELINE_best --env BabyAI-GoToImpUnlock-v0 --demos /data/graceduansu/demos/BabyAI-GoToImpUnlock-v0 --concept_whitening --memory-dim=2048 --recurrence=80 --batch-size=128 --instr-arch=attgru --instr-dim=256 --val-interval 1 --log-interval 1  --epoch-length 51200 --lr 5e-5 --tb
 
 
 CUDA_VISIBLE_DEVICES=7 scripts/LOG_train_il.py --model MY-BASELINE --continue_training /data/graceduansu/models/MY-BASELINE/model_epoch33_chkpt.pt --env BabyAI-GoToImpUnlock-v0 --demos /data/graceduansu/demos/BabyAI-GoToImpUnlock-v0 --memory-dim=2048 --recurrence=80 --batch-size=128 --instr-arch=attgru --instr-dim=256 --val-interval 1 --log-interval 1  --epoch-length 51200 --lr 5e-5 --tb
 
 
+##########3 BossLevel transfer######################################
+CUDA_VISIBLE_DEVICES=5 scripts/LOG_train_il.py --model BossLevel-MY-BASELINE-TransferCW --pretrained-model MY-BASELINE-TransferCW_best --env BabyAI-BossLevel-v0 --demos /data/graceduansu/demos/BabyAI-BossLevel-v0 --memory-dim=2048 --recurrence=80 --batch-size=128 --instr-arch=attgru --instr-dim=256 --val-interval 1 --log-interval 1  --epoch-length 51200 --lr 5e-5 --tb
+
+CUDA_VISIBLE_DEVICES=4 scripts/LOG_train_il.py --model BossLevel --env BabyAI-BossLevel-v0 --demos /data/graceduansu/demos/BabyAI-BossLevel-v0 --memory-dim=2048 --recurrence=80 --batch-size=128 --instr-arch=attgru --instr-dim=256 --val-interval 1 --log-interval 1  --epoch-length 51200 --lr 5e-5 --tb 
+
+
+########### UnlockRGB ######################################3
+CUDA_VISIBLE_DEVICES=7 scripts/LOG_train_il.py --model UnlockRGB --env BabyAI-UnlockRGB-v0 --demos /data/graceduansu/demos/BabyAI-UnlockRGB-v0 --tb --batch-size=256 --val-episodes 512 --val-interval 1 --log-interval 1 --epoch-length 25600
+CUDA_VISIBLE_DEVICES=7 scripts/LOG_train_il.py --model UnlockRGB_CW --concept_whitening --env BabyAI-UnlockRGB-v0 --demos /data/graceduansu/demos/BabyAI-UnlockRGB-v0 --tb --batch-size=256 --val-episodes 512 --val-interval 1 --log-interval 1 --epoch-length 25600
+
+
+
 tensorboard --logdir /data/graceduansu/logs/
 
-python scripts/show_level_instructions.py BabyAI-SynthSeq-v0 --n-episodes 5
+python scripts/show_level_instructions.py BabyAI-UnlockRGB-v0 --n-episodes 50
 
 python babyai/scripts/il_dataeff.py --regex '.*BabyAI-GoToImpUnlock-v0.*' --window 10 report_BabyAI-GoToImpUnlock-v0_CW --path '/logs'
 
-
+ python visualize_concepts.py > /data/graceduansu/models/BabyAI-CW_best/visualize.txt
 
 
 ########### measure sample efficiency #############################
-CUDA_VISIBLE_DEVICES=2 python scripts/get_dataeff.py
+CUDA_VISIBLE_DEVICES=7 python scripts/get_dataeff.py
 
 
 CUDA_VISIBLE_DEVICES=7 scripts/evaluate.py --env BabyAI-GoToImpUnlock-v0 --model BabyAI-GoToImpUnlock-v0_IL_bow_endpool_res_attgru_seed1_21-07-24-18-35-25_best
+
+
+############## GENERATE demos ########################3
+scripts/make_agent_demos.py --episodes 3 --env BabyAI-GoToImpUnlock-v0 --demos TEST-GoToImpUnlock-v0 --valid-episodes 0
+
+
+
+
 
 
 ###### pulled docker image id ################33

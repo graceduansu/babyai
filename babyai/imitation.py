@@ -374,7 +374,7 @@ class ImitationLearning(object):
 
         obss, action_true, done = flat_batch[:, 0], flat_batch[:, 1], flat_batch[:, 2]
         
-        len_batch = 1280
+        len_batch = self.args.batch_size
         # Memory to be stored
         memories = torch.zeros([len(flat_batch), self.acmodel.memory_size], device=self.device)
         memory = torch.zeros([len_batch, self.acmodel.memory_size], device=self.device)
@@ -427,7 +427,7 @@ class ImitationLearning(object):
         obss, action_true, done = flat_concept_batch[:, 0], flat_concept_batch[:, 1], flat_concept_batch[:, 2]
 
         preprocessed_first_obs = self.obss_preprocessor(obss[concept_inds], device=self.device)
-        instr_embedding = self.acmodel._get_instr_embedding(preprocessed_first_obs.instr)
+        instr_embedding = self.acmodel._get_instr_embedding(preprocessed_first_obs.instr).float()
         c_indexes = self.starting_indexes(len(flat_concept_batch))
         concept_memory = concept_memories[c_indexes]
 
@@ -475,7 +475,7 @@ class ImitationLearning(object):
         mean_return = {tid: np.mean(log["return_per_episode"]) for tid, log in enumerate(logs)}
         return mean_return
 
-    def train(self, train_demos, writer, csv_writer, status_path, header, reset_status=False, concept_directory='/data/graceduansu/concepts'):
+    def train(self, train_demos, writer, csv_writer, status_path, header, reset_status=False, concept_directory='/data/graceduansu/UnlockRGB_concepts'):
         concept_dirs = sorted([os.path.join(concept_directory, filename) for filename in os.listdir(concept_directory)])
         print('Concepts:', [os.path.basename(p) for p in concept_dirs], '\n')
 

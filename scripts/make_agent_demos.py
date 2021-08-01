@@ -98,10 +98,14 @@ def generate_demos(n_episodes, valid, seed, shift=0):
         mission = obs["mission"]
         images = []
         directions = []
+        subgoals = []
+        print('Mission: {}'.format(mission))
 
         try:
             while not done:
-                action = agent.act(obs)['action']
+                result = agent.act(obs)
+                action = result['action']
+                subgoal = result['subgoal']
                 if isinstance(action, torch.Tensor):
                     action = action.item()
                 new_obs, reward, done, _ = env.step(action)
@@ -110,10 +114,11 @@ def generate_demos(n_episodes, valid, seed, shift=0):
                 actions.append(action)
                 images.append(obs['image'])
                 directions.append(obs['direction'])
+                subgoals.append(subgoal)
 
                 obs = new_obs
             if reward > 0 and (args.filter_steps == 0 or len(images) <= args.filter_steps):
-                demos.append((mission, blosc.pack_array(np.array(images)), directions, actions))
+                demos.append((mission, blosc.pack_array(np.array(images)), directions, actions, subgoals))
                 just_crashed = False
 
             if reward == 0:

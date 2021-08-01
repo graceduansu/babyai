@@ -92,7 +92,7 @@ class ACModel(nn.Module, babyai.rl.RecurrentACModel):
 
         # if not self.use_instr:
         #     raise ValueError("FiLM architecture can be used when instructions are enabled")
-        print('BRUH ', concept_whitening)
+
         if concept_whitening == True:
             self.cw_layer = CWLayer(128, activation_mode='mean', T=8)
 
@@ -290,7 +290,9 @@ class ACModel(nn.Module, babyai.rl.RecurrentACModel):
         x = x.reshape(x.shape[0], -1)
 
         if self.use_memory:
-            hidden = (memory[:, :self.semi_memory_size], memory[:, self.semi_memory_size:])
+            memory = memory.float()
+            hidden = (memory[:, :self.semi_memory_size].float(), memory[:, self.semi_memory_size:].float())
+            x = x.float()
             hidden = self.memory_rnn(x, hidden)
             embedding = hidden[0]
             # print('============================= DEBUG rnn embedding requires grad =============================')

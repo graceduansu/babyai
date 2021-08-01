@@ -49,7 +49,7 @@ class Subgoal:
         representation = '('
         representation += type(self).__name__
         if self.datum is not None:
-            representation += ': {}'.format(self.datum)
+            representation += ': [{}]'.format(self.datum)
         if self.reason is not None:
             representation += ', reason: {}'.format(self.reason)
         representation += ')'
@@ -588,13 +588,15 @@ class Bot:
             # (because it is completed, because there is blocker,
             # or because exploration is required), keep replanning
             if suggested_action is not None:
+                print('subgoal: {}'.format(subgoal.__repr__()))
+                print('action: {}'.format(suggested_action))
                 break
         if not self.stack:
             suggested_action = self.mission.actions.done
 
         self._remember_current_state()
 
-        return suggested_action
+        return suggested_action, subgoal
 
     def _find_obj_pos(self, obj_desc, adjacent=False):
         """Find the position of the closest visible object matching a given description."""

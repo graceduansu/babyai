@@ -12,12 +12,12 @@ from babyai.iterative_normalization import iterative_normalization_py
 
 ### Constants
 
-CONCEPTS = [
-    '1_search_for_key', '2_take_key_to_door', '3_search_for_target'
-]
+# CONCEPTS = [
+#     '1_search_for_key', '2_take_key_to_door', '3_search_for_target'
+# ]
 
-# CONCEPTS = ['0_search_for_red_key', '1_search_for_green_key', '2_search_for_blue_key',
-#     '3_take_red_key_to_door', '4_take_green_key_to_door', '5_take_blue_key_to_door']
+CONCEPTS = ['0_search_for_red_key', '1_search_for_green_key', '2_search_for_blue_key',
+    '3_take_red_key_to_door', '4_take_green_key_to_door', '5_take_blue_key_to_door']
 
 ### Helper Functions
 
@@ -26,7 +26,7 @@ def load(path):
         data = pickle.load(file)
     return data
 
-def starting_indexes(num_frames, recurrence=80):
+def starting_indexes(num_frames, recurrence=20):
     if num_frames % recurrence == 0:
         return np.arange(0, num_frames, recurrence)
     else:
@@ -35,24 +35,13 @@ def starting_indexes(num_frames, recurrence=80):
 ### Activations
 
 def get_activations(acmodel, batch_dict, observation_space, action_space, model_name, 
-    recurrence=80, num_concepts=len(CONCEPTS), device='cuda:6'):
+    recurrence=20, num_concepts=6, device='cuda:6'):
 
     outputs = []
     def hook(module, input, output):
-        X_hat = iterative_normalization_py.apply(
-            input[0], 
-            module.running_mean, module.running_wm, module.num_channels, 
-            module.T, module.eps, module.momentum, module.training)
-        size_X = X_hat.size()
-        size_R = module.running_rot.size()
-        X_hat = X_hat.view(size_X[0], size_R[0], size_R[2], *size_X[2:])
+        outputs.append(output.cpu().numpy())
 
-        X_hat = torch.einsum('bgchw,gdc->bgdhw', X_hat, module.running_rot)
-        X_hat = X_hat.view(*size_X)
-
-        outputs.append(X_hat.cpu().numpy())
-
-    acmodel.cw_layer.register_forward_hook(hook)
+    acmodel.image_conv[5].register_forward_hook(hook)
 
     flat_batch = batch_dict['flat_batch']
     mask = torch.tensor(batch_dict['mask'], device=device)
@@ -69,7 +58,7 @@ def get_activations(acmodel, batch_dict, observation_space, action_space, model_
 
     obss, action_true, done = flat_batch[:, 0], flat_batch[:, 1], flat_batch[:, 2]
     
-    len_batch = 1280
+    len_batch = 256
     # Memory to be stored
     memories = torch.zeros([len(flat_batch), acmodel.memory_size], device=device)
     memory = torch.zeros([len_batch, acmodel.memory_size], device=device)
@@ -146,13 +135,13 @@ def get_activations(acmodel, batch_dict, observation_space, action_space, model_
 
 
 ##########################################
-model_name = 'BabyAI-CW_best'
+model_name = 'UnlockRGB_best'
 device = 'cuda:6'
 #############################################
 
 model_path = '/data/graceduansu/models/'+ model_name + '/model.pt'
 
-concept_directory='/data/graceduansu/concepts'
+concept_directory='/data/graceduansu/UnlockRGB_concepts'
 concept_dirs = sorted([os.path.join(concept_directory, filename) for filename in os.listdir(concept_directory)])
 
 # Models
@@ -160,13 +149,12 @@ concept_dirs = sorted([os.path.join(concept_directory, filename) for filename in
 acmodel = torch.load(model_path).to(device)
 
 # Env
-#env_name = 'BabyAI-UnlockRGB-v0'
-env_name = 'BabyAI-GoToImpUnlock-v0'
+env_name = 'BabyAI-UnlockRGB-v0'
 env = gym.make(env_name)
 observation_space = env.observation_space
 action_space = env.action_space
 
-x = np.zeros((1,len(CONCEPTS)))
+x = np.zeros((1,6))
 y = []
 
 for concept_index, concept_dir in enumerate(tqdm.tqdm(concept_dirs, leave=False)):
@@ -191,6 +179,7 @@ for concept_index, concept_dir in enumerate(tqdm.tqdm(concept_dirs, leave=False)
     print('Size of concept {}: {}'.format(concept_index, len(a)))
 
     x_pos = [i for i, _ in enumerate(CONCEPTS)]
+
     plt.bar(x_pos, z)
     plt.xticks(x_pos, CONCEPTS)
     plt.title('Model {}:\n Mean activations for Concept {} Data Input'.format(model_name, concept_index))
