@@ -528,7 +528,7 @@ class ImitationLearning(object):
             # Concept whitening
             #  and np.mean(log['policy_loss']) < 8.0
             if self.args.concept_whitening:
-                if (status['i'] + 1) % 1 == 0:
+                for _ in tqdm.trange(1):
                     self.acmodel.eval()
                     with torch.no_grad():
                         for concept_index, concept_dir in enumerate(tqdm.tqdm(concept_dirs, leave=False)):

@@ -92,9 +92,25 @@ class ACModel(nn.Module, babyai.rl.RecurrentACModel):
 
         # if not self.use_instr:
         #     raise ValueError("FiLM architecture can be used when instructions are enabled")
-
+        
         if concept_whitening == True:
-            self.cw_layer = CWLayer(128, activation_mode='mean', T=8)
+            # self.image_conv = nn.Sequential(*[
+            #     *([ImageBOWEmbedding(obs_space['image'], 128)] if use_bow else []),
+            #     *([nn.Conv2d(
+            #         in_channels=3, out_channels=128, kernel_size=(8, 8),
+            #         stride=8, padding=0)] if pixel else []),
+            #     nn.Conv2d(
+            #         in_channels=128 if use_bow or pixel else 3, out_channels=128,
+            #         kernel_size=(3, 3) if endpool else (2, 2), stride=1, padding=1),
+            #     CWLayer(128, activation_mode='mean', T=8, momentum=0.5),
+                
+            #     nn.ReLU(),
+            #     *([] if endpool else [nn.MaxPool2d(kernel_size=(2, 2), stride=2)]),
+            #     nn.Conv2d(in_channels=128, out_channels=128, kernel_size=(3, 3), padding=1),
+            #     nn.BatchNorm2d(128),
+            #     nn.ReLU(),
+            #     *([] if endpool else [nn.MaxPool2d(kernel_size=(2, 2), stride=2)])
+            #     ])
 
             self.image_conv = nn.Sequential(*[
                 *([ImageBOWEmbedding(obs_space['image'], 128)] if use_bow else []),
@@ -105,13 +121,16 @@ class ACModel(nn.Module, babyai.rl.RecurrentACModel):
                     in_channels=128 if use_bow or pixel else 3, out_channels=128,
                     kernel_size=(3, 3) if endpool else (2, 2), stride=1, padding=1),
                 nn.BatchNorm2d(128),
+                
                 nn.ReLU(),
                 *([] if endpool else [nn.MaxPool2d(kernel_size=(2, 2), stride=2)]),
                 nn.Conv2d(in_channels=128, out_channels=128, kernel_size=(3, 3), padding=1),
-                self.cw_layer,
+                CWLayer(128, activation_mode='mean', T=8, momentum=0.5),
+                
                 nn.ReLU(),
                 *([] if endpool else [nn.MaxPool2d(kernel_size=(2, 2), stride=2)])
                 ])
+
         else:
             self.image_conv = nn.Sequential(*[
                 *([ImageBOWEmbedding(obs_space['image'], 128)] if use_bow else []),
@@ -129,7 +148,27 @@ class ACModel(nn.Module, babyai.rl.RecurrentACModel):
                 nn.ReLU(),
                 *([] if endpool else [nn.MaxPool2d(kernel_size=(2, 2), stride=2)])
                 ])
+        """
+        self.image_conv = nn.Sequential(*[
+                *([ImageBOWEmbedding(obs_space['image'], 128)] if use_bow else []),
+                *([nn.Conv2d(
+                    in_channels=3, out_channels=128, kernel_size=(8, 8),
+                    stride=8, padding=0)] if pixel else []),
+                nn.Conv2d(
+                    in_channels=128 if use_bow or pixel else 3, out_channels=128,
+                    kernel_size=(3, 3) if endpool else (2, 2), stride=1, padding=1),
+                nn.BatchNorm2d(128),
+                nn.ReLU(),
+                *([] if endpool else [nn.MaxPool2d(kernel_size=(2, 2), stride=2)]),
+                nn.Conv2d(in_channels=128, out_channels=128, kernel_size=(3, 3), padding=1),
+                nn.BatchNorm2d(128),
+                nn.ReLU(),
+                *([] if endpool else [nn.MaxPool2d(kernel_size=(2, 2), stride=2)])
+                ])
 
+        if concept_whitening:
+            self.add_cw()
+        """
         
         self.film_pool = nn.MaxPool2d(kernel_size=(7, 7) if endpool else (2, 2), stride=2)
 
@@ -195,16 +234,17 @@ class ACModel(nn.Module, babyai.rl.RecurrentACModel):
 
 
     def add_cw(self):
-            self.cw_layer = CWLayer(128, activation_mode='mean')
-            self.image_conv[5] = self.cw_layer
+        self.cw_layer = CWLayer(128, activation_mode='mean', T=10, momentum=0.1)
+        self.image_conv[2] = self.cw_layer
 
 
     def change_mode(self, mode):
-        self.cw_layer.mode = mode
+        #self.cw_layer.mode = mode
+        self.image_conv[2].mode = mode
 
     
     def update_rotation_matrix(self):
-        self.cw_layer.update_rotation_matrix()
+        self.image_conv[2].update_rotation_matrix()
 
 
     def add_heads(self):

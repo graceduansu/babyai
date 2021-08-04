@@ -19,7 +19,7 @@ parser.add_argument("--other", default=None,
     help="path to model logs for ttest comparison")
 parser.add_argument("--other_regex", default='.*',
     help="filter out some logs from comparison")
-parser.add_argument("--window", type=int, default=100,
+parser.add_argument("--window", type=int, default=10,
     help="size of sliding window average, 10 for GoToRedBallGrey, 100 otherwise")
 args = parser.parse_args()
 

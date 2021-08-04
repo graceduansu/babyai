@@ -235,7 +235,7 @@ def estimate_sample_efficiency(df, visualize=False, figure_path=None):
     y = y[indices].values
 
     success_threshold = 0.99
-    min_datapoints = 5
+    min_datapoints = 4
     almost_threshold = 0.95
 
     if (y > success_threshold).sum() < min_datapoints:

@@ -35,11 +35,22 @@ def starting_indexes(num_frames, recurrence=20):
 ### Activations
 
 def get_activations(acmodel, batch_dict, observation_space, action_space, model_name, 
-    recurrence=20, num_concepts=6, device='cuda:6'):
+    recurrence=20, num_concepts=len(CONCEPTS), device='cuda:6'):
 
     outputs = []
     def hook(module, input, output):
-        outputs.append(output.cpu().numpy())
+        X_hat = iterative_normalization_py.apply(
+            input[0], 
+            module.running_mean, module.running_wm, module.num_channels, 
+            module.T, module.eps, module.momentum, module.training)
+        size_X = X_hat.size()
+        size_R = module.running_rot.size()
+        X_hat = X_hat.view(size_X[0], size_R[0], size_R[2], *size_X[2:])
+
+        X_hat = torch.einsum('bgchw,gdc->bgdhw', X_hat, module.running_rot)
+        X_hat = X_hat.view(*size_X)
+
+        outputs.append(X_hat.cpu().numpy())
 
     acmodel.image_conv[5].register_forward_hook(hook)
 
@@ -51,7 +62,7 @@ def get_activations(acmodel, batch_dict, observation_space, action_space, model_
     concept_mask = torch.tensor(batch_dict['concept_mask'], device=device)
     concept_episode_ids = batch_dict['concept_episode_ids']
     concept_inds = batch_dict['concept_inds']
-
+    
     obss_preprocessor = utils.ObssPreprocessor(model_name, observation_space, None)
 
     num_frames = len(flat_batch)
@@ -131,40 +142,49 @@ def get_activations(acmodel, batch_dict, observation_space, action_space, model_
 
     activations = np.vstack(outputs).max((2, 3))[:, :num_concepts]
     return activations
-
+    """
+    # TODO: change flat_batch[:,0] from dict to list and use image and direction only
+    return flat_batch
+    """
 
 
 ##########################################
-model_name = 'UnlockRGB_best'
+model_name = 'UnlockRGB-CWx5_best'
 device = 'cuda:6'
 #############################################
 
 model_path = '/data/graceduansu/models/'+ model_name + '/model.pt'
+#model_path = '/data/graceduansu/models/UnlockRGB-CW-p05/model_epoch80_chkpt.pt'
 
 concept_directory='/data/graceduansu/UnlockRGB_concepts'
 concept_dirs = sorted([os.path.join(concept_directory, filename) for filename in os.listdir(concept_directory)])
 
 # Models
-
+checkpoint = torch.load(model_path)
+#acmodel = checkpoint['model'].to(device)
 acmodel = torch.load(model_path).to(device)
+print(acmodel)
 
 # Env
 env_name = 'BabyAI-UnlockRGB-v0'
+#env_name = 'BabyAI-GoToImpUnlock-v0'
 env = gym.make(env_name)
 observation_space = env.observation_space
 action_space = env.action_space
 
-x = np.zeros((1,6))
+x = np.zeros((1,len(CONCEPTS)))
+#x = np.zeros((1,1))
+
 y = []
 
 for concept_index, concept_dir in enumerate(tqdm.tqdm(concept_dirs, leave=False)):
     concept_paths = [os.path.join(concept_dir, f) for f in os.listdir(concept_dir)]
     activations = []
     print('Concept {}'.format(concept_index))
-
-    for _ in tqdm.trange(10):
+    len_concepts = 0
+    for _ in tqdm.trange(3):
         concept_path = np.random.choice(concept_paths)
-        
+        print('concept path {}'.format(concept_path))
         batch_dict = None
         with open(concept_path, 'rb') as file:
             batch_dict = pickle.load(file)
@@ -172,20 +192,23 @@ for concept_index, concept_dir in enumerate(tqdm.tqdm(concept_dirs, leave=False)
         a = get_activations(acmodel, batch_dict, observation_space, action_space, model_name, device=device)
         activations.append(a)
         x = np.vstack((x,a))
+        len_concepts += len(a)
         y += [concept_index for i in range(len(a))]
-
+        #y += [concept_index]
+    
     z = np.vstack(activations).mean(axis=0)
     print(z)
-    print('Size of concept {}: {}'.format(concept_index, len(a)))
+    print('Size of concept {}: {}'.format(concept_index, len_concepts))
 
     x_pos = [i for i, _ in enumerate(CONCEPTS)]
-
     plt.bar(x_pos, z)
-    plt.xticks(x_pos, CONCEPTS)
+    plt.xticks(x_pos, CONCEPTS, rotation=90)
+    plt.ylim(0, 2)
     plt.title('Model {}:\n Mean activations for Concept {} Data Input'.format(model_name, concept_index))
-    plt.savefig('/data/graceduansu/models/{}/mean_activations_concept_{}.png'.format(model_name, concept_index))
+    plt.savefig('/data/graceduansu/models/{}/mean_activations_concept_{}.png'.format(model_name, concept_index), bbox_inches='tight')
     plt.show()
     plt.clf()
+    
 
 y = np.array(y)
 x = x[1:]
